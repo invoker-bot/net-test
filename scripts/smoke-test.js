@@ -4,10 +4,14 @@
 
 import net from 'node:net';
 import dgram from 'node:dgram';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { TcpClientTransport, TcpServerTransport } from '../src/main/transports/tcp.js';
 import { UdpTransport } from '../src/main/transports/udp.js';
 import { WsClientTransport, WsServerTransport } from '../src/main/transports/ws.js';
 import { MockTransport } from '../src/main/transports/mock.js';
+import { Recorder } from '../src/main/recorder.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
@@ -139,12 +143,55 @@ async function testMock() {
   check('magic word 0xCAFE present (LE)', dv.getUint16(0, true) === 0xCAFE);
 }
 
+async function testRecorder() {
+  console.log('\nRecorder writes JSONL with meta header + per-packet lines');
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nettest-rec-'));
+  const rec = new Recorder({
+    dir: tmpDir,
+    meta: { name: 'TCP Server :7100', proto: 'TCP', role: 'server', endpoint: 'tcp://0.0.0.0:7100' },
+  });
+  await rec.start();
+  check('file path returned + within target dir',
+    typeof rec.path === 'string' && rec.path.startsWith(tmpDir), rec.path);
+  // Colon in name must be replaced — file must actually be openable on NTFS.
+  check('filename has no NTFS-reserved chars',
+    !/[:*?"<>|]/.test(path.basename(rec.path)),
+    path.basename(rec.path));
+
+  rec.write({ bytes: new Uint8Array([0xCA, 0xFE, 0x01, 0x10]), tms: 1715000000123, dir: 'rx' });
+  rec.write({ bytes: new Uint8Array([0xDE, 0xAD]), tms: 1715000000456, dir: 'tx' });
+  await rec.stop();
+
+  const content = await fs.readFile(rec.path, 'utf8');
+  const lines = content.trim().split('\n');
+  check('3 lines written (meta + 2 packets)', lines.length === 3, `got ${lines.length}`);
+
+  const meta = JSON.parse(lines[0]);
+  check('meta header has type=meta', meta.type === 'meta');
+  check('meta carries connection name', meta.name === 'TCP Server :7100');
+  check('meta carries endpoint', meta.endpoint === 'tcp://0.0.0.0:7100');
+  check('meta has startedAt ISO timestamp', /^\d{4}-\d{2}-\d{2}T/.test(meta.startedAt));
+
+  const p1 = JSON.parse(lines[1]);
+  check('packet 1 hex uppercase', p1.hex === 'CAFE0110', p1.hex);
+  check('packet 1 tms preserved', p1.tms === 1715000000123);
+  check('packet 1 dir preserved', p1.dir === 'rx');
+
+  const p2 = JSON.parse(lines[2]);
+  check('packet 2 hex correct', p2.hex === 'DEAD', p2.hex);
+  check('packet 2 dir tx', p2.dir === 'tx');
+
+  // Cleanup
+  await fs.rm(tmpDir, { recursive: true, force: true });
+}
+
 async function main() {
   try {
     await testMock();
     await testTcp();
     await testUdp();
     await testWebSocket();
+    await testRecorder();
   } catch (e) {
     console.error('UNHANDLED', e);
     results.push({ name: 'unhandled', ok: false, detail: e.message });

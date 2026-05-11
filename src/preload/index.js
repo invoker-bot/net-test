@@ -9,7 +9,14 @@ const api = {
   stopConnection: (id) => ipcRenderer.invoke('conn:stop', id),
   sendBytes: (id, bytes) => ipcRenderer.invoke('conn:send', id, Array.from(bytes)),
   clearBuffer: (id) => ipcRenderer.invoke('conn:clear', id),
+  startRecording: (id) => ipcRenderer.invoke('conn:startRecording', id),
+  stopRecording: (id) => ipcRenderer.invoke('conn:stopRecording', id),
   listSerialPorts: () => ipcRenderer.invoke('serial:listPorts'),
+
+  getRecordingsDir: () => ipcRenderer.invoke('app:getRecordingsDir'),
+  setRecordingsDir: (p) => ipcRenderer.invoke('app:setRecordingsDir', p),
+  pickRecordingsDir: () => ipcRenderer.invoke('app:pickRecordingsDir'),
+  openRecordingsDir: () => ipcRenderer.invoke('app:openRecordingsDir'),
 
   onPacket: (cb) => {
     const listener = (_e, payload) => cb(payload);

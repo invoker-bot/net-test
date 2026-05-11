@@ -6,7 +6,7 @@ import { Icon, ProtoIcon } from './ui/Icon.jsx';
 
 export function ConnectionsPanel({
   connections, selectedId, onSelect, rateByConn,
-  onToggleStream, onAdd, onRemove, onUpdate,
+  onToggleStream, onToggleRecording, onAdd, onRemove, onUpdate,
 }) {
   const [editId, setEditId] = useState(null);
   const [filter, setFilter] = useState('');
@@ -86,6 +86,24 @@ export function ConnectionsPanel({
               <div className="mt-1.5 flex items-center gap-2 pl-8">
                 <span className="mono text-[10px] tabular text-zinc-500">{formatRate(rate)}</span>
                 <div className="flex-1" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); onToggleRecording(c.id); }}
+                  title={c.recording
+                    ? `Recording → ${(c.recordingPath || '').split(/[\\/]/).pop()}`
+                    : 'Start recording to JSONL'}
+                  className={cx(
+                    'h-5 px-1.5 rounded text-[10px] font-medium border inline-flex items-center gap-1',
+                    c.recording
+                      ? 'bg-rose-50 border-rose-200 text-rose-700'
+                      : 'bg-zinc-50 border-zinc-200 text-zinc-500 hover:text-zinc-700',
+                  )}
+                >
+                  <span className={cx(
+                    'w-1.5 h-1.5 rounded-full',
+                    c.recording ? 'bg-rose-500 pulse-soft' : 'bg-zinc-400',
+                  )} />
+                  REC
+                </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); onToggleStream(c.id); }}
                   className={cx(

@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { promises as fsp } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ConnectionManager } from './connection-mgr.js';
@@ -61,7 +62,27 @@ function registerIpc() {
   ipcMain.handle('conn:stop', (_e, id) => cm.stop(id));
   ipcMain.handle('conn:send', (_e, id, bytesArray) => cm.send(id, Uint8Array.from(bytesArray)));
   ipcMain.handle('conn:clear', (_e, id) => cm.clearBuffer(id));
+  ipcMain.handle('conn:startRecording', (_e, id) => cm.startRecording(id));
+  ipcMain.handle('conn:stopRecording', (_e, id) => cm.stopRecording(id));
   ipcMain.handle('serial:listPorts', () => cm.listSerialPorts());
+  ipcMain.handle('app:getRecordingsDir', () => cm.getRecordingsDir());
+  ipcMain.handle('app:setRecordingsDir', (_e, p) => cm.setRecordingsDir(p));
+  ipcMain.handle('app:pickRecordingsDir', async () => {
+    const current = cm.getRecordingsDir().path;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose recordings folder',
+      defaultPath: current,
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+  ipcMain.handle('app:openRecordingsDir', async () => {
+    const dir = cm.getRecordingsDir().path;
+    try { await fsp.mkdir(dir, { recursive: true }); } catch {}
+    const err = await shell.openPath(dir);
+    return err ? { error: err } : { ok: true, path: dir };
+  });
 }
 
 app.whenReady().then(() => {

@@ -138,6 +138,49 @@ export function TweakSelect({ label, value, options, onChange }) {
   );
 }
 
+// Truncate paths in the middle: keep head + tail so the user can recognize both
+// the drive/volume and the leaf folder, drop the chewy middle.
+function truncatePath(p, max = 38) {
+  if (!p || p.length <= max) return p || '';
+  const keep = Math.floor((max - 1) / 2);
+  return p.slice(0, keep) + '…' + p.slice(-keep);
+}
+
+const TWEAK_BTN_STYLE = {
+  appearance: 'none', border: '.5px solid rgba(0,0,0,.1)',
+  background: 'rgba(255,255,255,.6)', color: 'inherit', font: 'inherit',
+  height: 24, padding: '0 10px', borderRadius: 6, cursor: 'pointer',
+  fontWeight: 500,
+};
+
+export function TweakPath({ label, value, isDefault, onChange, onOpen, onReset }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', color: 'rgba(41,38,27,.72)' }}>
+        <span style={{ fontWeight: 500 }}>{label}</span>
+        {isDefault && <span style={{ fontSize: 9.5, color: 'rgba(41,38,27,.4)' }}>default</span>}
+      </div>
+      <div
+        title={value}
+        style={{
+          fontFamily: 'var(--mono)', fontSize: 10.5,
+          color: 'rgba(41,38,27,.6)', whiteSpace: 'nowrap',
+          overflow: 'hidden', textOverflow: 'ellipsis',
+          background: 'rgba(0,0,0,.04)', border: '.5px solid rgba(0,0,0,.06)',
+          borderRadius: 6, padding: '5px 8px',
+        }}
+      >{truncatePath(value)}</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button type="button" onClick={onChange} style={{ ...TWEAK_BTN_STYLE, flex: 1 }}>Change…</button>
+        <button type="button" onClick={onOpen} style={TWEAK_BTN_STYLE}>Open</button>
+        {!isDefault && (
+          <button type="button" onClick={onReset} style={TWEAK_BTN_STYLE}>Reset</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function TweakColor({ label, value, options, onChange }) {
   return (
     <Row label={label}>

@@ -6,6 +6,7 @@ import { UdpTransport } from './transports/udp.js';
 import { WsClientTransport, WsServerTransport } from './transports/ws.js';
 import { MockTransport } from './transports/mock.js';
 import { SerialTransport, listSerialPorts } from './transports/serial.js';
+import { Recorder } from './recorder.js';
 
 export const IS_DEV = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
 
@@ -31,6 +32,8 @@ export class ConnectionManager {
   constructor(emit) {
     this.emit = emit;
     this.conns = new Map();
+    this._recorders = new Map();
+    this._recordingsDir = null; // null = use default
     this._saveTimer = null;
     this._loadInitial();
   }
@@ -43,8 +46,11 @@ export class ConnectionManager {
       if (existsSync(STATE_FILE)) {
         const raw = readFileSync(STATE_FILE, 'utf8');
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.version === STATE_VERSION && Array.isArray(parsed.connections)) {
-          loaded = parsed.connections;
+        if (parsed && parsed.version === STATE_VERSION) {
+          if (Array.isArray(parsed.connections)) loaded = parsed.connections;
+          if (typeof parsed.recordingsDir === 'string' && parsed.recordingsDir.length > 0) {
+            this._recordingsDir = parsed.recordingsDir;
+          }
         }
       }
     } catch {
@@ -79,11 +85,30 @@ export class ConnectionManager {
         id: c.id, name: c.name, proto: c.proto, role: c.role,
         bind: c.bind, remote: c.remote, endpoint: c.endpoint, color: c.color,
       })),
+      recordingsDir: this._recordingsDir,
     };
     const tmp = STATE_FILE + '.tmp';
     await fs.mkdir(path.dirname(STATE_FILE), { recursive: true });
     await fs.writeFile(tmp, JSON.stringify(payload, null, 2));
     await fs.rename(tmp, STATE_FILE);
+  }
+
+  defaultRecordingsDir() {
+    return path.join(app.getPath('userData'), 'recordings');
+  }
+
+  getRecordingsDir() {
+    const isDefault = !this._recordingsDir;
+    return {
+      path: this._recordingsDir || this.defaultRecordingsDir(),
+      isDefault,
+    };
+  }
+
+  setRecordingsDir(p) {
+    this._recordingsDir = (typeof p === 'string' && p.length > 0) ? p : null;
+    this._scheduleSave();
+    return this.getRecordingsDir();
   }
 
   list() {
@@ -96,6 +121,8 @@ export class ConnectionManager {
       bind: c.bind, remote: c.remote, endpoint: c.endpoint,
       color: c.color, status: c.status, streaming: !!c.streaming,
       lastError: c.lastError,
+      recording: !!c.recording,
+      recordingPath: c.recordingPath || null,
     };
   }
 
@@ -108,12 +135,15 @@ export class ConnectionManager {
   _emitPacket(id, bytes, dir) {
     const c = this.conns.get(id);
     if (!c) return;
+    const tms = Date.now();
     this.emit('conn:packet', {
       id,
       bytes: Array.from(bytes),
-      tms: Date.now(),
+      tms,
       dir,
     });
+    const rec = this._recorders.get(id);
+    if (rec) rec.write({ bytes, tms, dir });
   }
 
   create(spec) {
@@ -161,10 +191,64 @@ export class ConnectionManager {
   async remove(id) {
     const c = this.conns.get(id);
     if (!c) return;
+    await this.stopRecording(id);
     await this._stopTransport(c);
     this.conns.delete(id);
     this.emit('conn:removed', { id });
     this._scheduleSave();
+  }
+
+  async startRecording(id) {
+    const c = this.conns.get(id);
+    if (!c) throw new Error('unknown connection ' + id);
+    if (this._recorders.has(id)) return this._public(c);
+    const rec = new Recorder({
+      dir: this.getRecordingsDir().path,
+      meta: { name: c.name, proto: c.proto, role: c.role, endpoint: c.endpoint },
+    });
+    rec.on('error', (err) => this._handleRecorderError(id, err));
+    try {
+      await rec.start();
+    } catch (e) {
+      c.lastError = 'recording: ' + e.message;
+      this._emitState(id);
+      throw e;
+    }
+    this._recorders.set(id, rec);
+    c.recording = true;
+    c.recordingPath = rec.path;
+    this._emitState(id);
+    return this._public(c);
+  }
+
+  async stopRecording(id) {
+    const c = this.conns.get(id);
+    const rec = this._recorders.get(id);
+    if (rec) {
+      this._recorders.delete(id);
+      try { await rec.stop(); } catch {}
+    }
+    if (c) {
+      c.recording = false;
+      c.recordingPath = null;
+      this._emitState(id);
+    }
+  }
+
+  _handleRecorderError(id, err) {
+    const rec = this._recorders.get(id);
+    if (rec) {
+      this._recorders.delete(id);
+      // Fire-and-forget — the stream is already in an errored state.
+      rec.stop().catch(() => {});
+    }
+    const c = this.conns.get(id);
+    if (c) {
+      c.recording = false;
+      c.recordingPath = null;
+      c.lastError = 'recording: ' + err.message;
+      this._emitState(id);
+    }
   }
 
   async start(id) {
@@ -248,6 +332,11 @@ export class ConnectionManager {
   }
 
   async shutdown() {
+    // Close recorders first — once the transports stop emitting, no fresh
+    // packets can race in and try to write to a half-torn-down stream.
+    for (const id of Array.from(this._recorders.keys())) {
+      await this.stopRecording(id);
+    }
     for (const c of this.conns.values()) {
       await this._stopTransport(c);
     }

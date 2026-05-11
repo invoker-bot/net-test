@@ -14,7 +14,7 @@ import { SendPanel } from './components/SendPanel.jsx';
 import { Button } from './components/ui/Button.jsx';
 import { Icon } from './components/ui/Icon.jsx';
 import {
-  TweaksPanel, TweakSection, TweakRadio, TweakSlider, TweakToggle, TweakSelect, TweakColor, useTweaks,
+  TweaksPanel, TweakSection, TweakRadio, TweakSlider, TweakToggle, TweakSelect, TweakColor, TweakPath, useTweaks,
 } from './components/TweaksPanel.jsx';
 
 const MONO_FONTS = ['JetBrains Mono', 'IBM Plex Mono', 'Geist Mono', 'SF Mono'];
@@ -33,7 +33,28 @@ export default function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [tweaksOpen, setTweaksOpen] = useState(false);
 
-  const { conns, buffers, rateByConn, toggleStream, addConn, removeConn, updateConn, sendBytes, clearBuffer } = useConnections();
+  const { conns, buffers, rateByConn, toggleStream, addConn, removeConn, updateConn, sendBytes, clearBuffer, toggleRecording } = useConnections();
+
+  // Recordings folder info — kept in renderer state and synced after every change.
+  // Initial fetch happens once on mount; subsequent updates flow through the
+  // Change / Reset handlers which return the new info.
+  const [recordingsDir, setRecordingsDir] = useState({ path: '', isDefault: true });
+  useEffect(() => {
+    window.nettest.getRecordingsDir().then(setRecordingsDir).catch(() => {});
+  }, []);
+  const handlePickRecordingsDir = useCallback(async () => {
+    const picked = await window.nettest.pickRecordingsDir();
+    if (!picked) return;
+    const info = await window.nettest.setRecordingsDir(picked);
+    setRecordingsDir(info);
+  }, []);
+  const handleOpenRecordingsDir = useCallback(() => {
+    window.nettest.openRecordingsDir().catch(() => {});
+  }, []);
+  const handleResetRecordingsDir = useCallback(async () => {
+    const info = await window.nettest.setRecordingsDir(null);
+    setRecordingsDir(info);
+  }, []);
 
   const [selectedId, setSelectedId] = useState(null);
   // Auto-select first conn once they load
@@ -244,6 +265,7 @@ export default function App() {
               onSelect={setSelectedId}
               rateByConn={rateByConn}
               onToggleStream={toggleStream}
+              onToggleRecording={toggleRecording}
               onAdd={handleAddConn}
               onRemove={removeConn}
               onUpdate={updateConn}
@@ -330,6 +352,16 @@ export default function App() {
         <TweakSection label="Appearance" />
         <TweakColor label="Accent" value={t.accent} options={ACCENT_OPTIONS} onChange={(v) => setTweak('accent', v)} />
         <TweakToggle label="Send panel enabled" value={t.showSendPanel} onChange={(v) => setTweak('showSendPanel', v)} />
+
+        <TweakSection label="Recording" />
+        <TweakPath
+          label="Recordings folder"
+          value={recordingsDir.path}
+          isDefault={recordingsDir.isDefault}
+          onChange={handlePickRecordingsDir}
+          onOpen={handleOpenRecordingsDir}
+          onReset={handleResetRecordingsDir}
+        />
       </TweaksPanel>
     </div>
   );

@@ -174,10 +174,22 @@ export function useConnections() {
     setBuffers((prev) => ({ ...prev, [id]: [] }));
   }, []);
 
+  const toggleRecording = useCallback(async (id) => {
+    const c = conns.find((x) => x.id === id);
+    if (!c) return;
+    try {
+      if (c.recording) await window.nettest.stopRecording(id);
+      else await window.nettest.startRecording(id);
+    } catch (e) {
+      console.error('toggleRecording failed:', e.message);
+    }
+  }, [conns]);
+
   return {
     conns, buffers, rateByConn,
     startConn, stopConn, toggleStream,
     addConn, removeConn, updateConn,
     sendBytes, clearBuffer,
+    toggleRecording,
   };
 }
