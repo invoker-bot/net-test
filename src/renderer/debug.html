@@ -1,0 +1,151 @@
+<!doctype html>
+<!--
+  Mock harness for testing the renderer outside Electron.
+  Run `npm run dev` (or any vite server rooted at src/renderer) and open
+  http://localhost:<port>/debug.html in a browser. window.nettest is stubbed
+  in-page so the renderer boots without the preload bridge.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>NetTest Debug (mock)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Must run BEFORE main.jsx imports — the renderer reads window.nettest
+      // inside hooks at mount time, and our addInitScript equivalent is just
+      // sticking this in the document head.
+      window.nettest = (function () {
+        const conns = new Map();
+        const seed = [
+          { id: 'c1', name: 'UDP Listener',    proto: 'UDP',  role: 'server', bind: '0.0.0.0:5005', endpoint: 'udp://0.0.0.0:5005', color: '#3b82f6' },
+          { id: 'c2', name: 'TCP Server :7100', proto: 'TCP', role: 'server', bind: '0.0.0.0:7100', endpoint: 'tcp://0.0.0.0:7100', color: '#f59e0b' },
+          { id: 'c6', name: 'ACC Physics',     proto: 'MMAP', role: 'client', remote: 'Local\\acpmf_physics', endpoint: 'mmap://Local\\acpmf_physics', color: '#dc2626', mmapSize: 800, mmapPollHz: 50 },
+        ];
+        for (const c of seed) {
+          conns.set(c.id, Object.assign({}, c, { status: 'idle', streaming: false, recording: false, recordingPath: null }));
+        }
+        const listeners = { packet: new Set(), state: new Set(), removed: new Set(), clear: new Set() };
+        const pub = (c) => ({
+          id: c.id, name: c.name, proto: c.proto, role: c.role,
+          bind: c.bind, remote: c.remote, endpoint: c.endpoint,
+          color: c.color, status: c.status, streaming: !!c.streaming,
+          lastError: c.lastError, recording: !!c.recording,
+          recordingPath: c.recordingPath || null,
+          mmapSize: c.mmapSize, mmapPollHz: c.mmapPollHz,
+        });
+        const emitState = (id) => {
+          const c = conns.get(id);
+          if (c) listeners.state.forEach((cb) => cb(pub(c)));
+        };
+        let recDir = { path: 'C:\\Users\\Test\\AppData\\Roaming\\net-test\\recordings', isDefault: true };
+
+        // Fake ACC physics packet generator — fires when c6 is "streaming".
+        // Fills first ~30 bytes so the user can see gas/brake/gear/rpm
+        // oscillate live once they load the ACC Physics struct.
+        let accSeq = 0;
+        setInterval(() => {
+          const c = conns.get('c6');
+          if (!c || !c.streaming) return;
+          const buf = new ArrayBuffer(800);
+          const dv = new DataView(buf);
+          accSeq++;
+          dv.setInt32(0, accSeq, true);
+          dv.setFloat32(4,  (Math.sin(accSeq * 0.1)  * 0.5 + 0.5), true);     // gas
+          dv.setFloat32(8,  (Math.cos(accSeq * 0.1)  * 0.5 + 0.5), true);     // brake
+          dv.setFloat32(12, Math.max(0, 80 - accSeq * 0.005), true);          // fuel L
+          dv.setInt32(16,   3 + Math.floor(Math.sin(accSeq * 0.05) * 2), true); // gear
+          dv.setInt32(20,   5000 + Math.floor(Math.sin(accSeq * 0.07) * 2000), true); // rpm
+          dv.setFloat32(24, Math.sin(accSeq * 0.03), true);                   // steerAngle
+          dv.setFloat32(28, 150 + Math.sin(accSeq * 0.03) * 50, true);        // speedKmh
+          const u8 = new Uint8Array(buf);
+          listeners.packet.forEach((cb) => cb({ id: 'c6', bytes: Array.from(u8), tms: Date.now(), dir: 'rx' }));
+        }, 50);
+
+        return {
+          isDev: true,
+          platform: 'win32',
+
+          listConnections: async () => Array.from(conns.values()).map(pub),
+
+          createConnection: async (spec) => {
+            const id = 'c' + Math.random().toString(36).slice(2, 9);
+            const conn = Object.assign({ id }, spec, { status: 'idle', streaming: false, recording: false, recordingPath: null });
+            conns.set(id, conn);
+            emitState(id);
+            return pub(conn);
+          },
+          updateConnection: async (id, patch) => {
+            const c = conns.get(id);
+            if (!c) return null;
+            Object.assign(c, patch);
+            emitState(id);
+            return pub(c);
+          },
+          removeConnection: async (id) => {
+            conns.delete(id);
+            listeners.removed.forEach((cb) => cb({ id }));
+          },
+          startConnection: async (id) => {
+            const c = conns.get(id);
+            if (!c) return;
+            c.streaming = true;
+            c.status = c.role === 'server' ? 'listening' : 'connected';
+            emitState(id);
+          },
+          stopConnection: async (id) => {
+            const c = conns.get(id);
+            if (!c) return;
+            c.streaming = false;
+            c.status = 'idle';
+            emitState(id);
+          },
+          sendBytes: async (id, bytes) => {
+            listeners.packet.forEach((cb) => cb({ id, bytes: Array.from(bytes), tms: Date.now(), dir: 'tx' }));
+          },
+          clearBuffer: async (id) => {
+            listeners.clear.forEach((cb) => cb({ id }));
+          },
+          startRecording: async (id) => {
+            const c = conns.get(id);
+            if (!c) return null;
+            c.recording = true;
+            c.recordingPath = recDir.path + '\\' + c.name + '-mock.jsonl';
+            emitState(id);
+            return pub(c);
+          },
+          stopRecording: async (id) => {
+            const c = conns.get(id);
+            if (!c) return;
+            c.recording = false;
+            c.recordingPath = null;
+            emitState(id);
+          },
+          listSerialPorts: async () => ({ ports: [] }),
+          getRecordingsDir: async () => recDir,
+          setRecordingsDir: async (p) => {
+            recDir = p ? { path: p, isDefault: false }
+                       : { path: 'C:\\Users\\Test\\AppData\\Roaming\\net-test\\recordings', isDefault: true };
+            return recDir;
+          },
+          pickRecordingsDir: async () => 'D:\\Custom\\recordings',
+          openRecordingsDir: async () => ({ ok: true, path: recDir.path }),
+
+          onPacket:  (cb) => { listeners.packet.add(cb);  return () => listeners.packet.delete(cb); },
+          onState:   (cb) => { listeners.state.add(cb);   return () => listeners.state.delete(cb); },
+          onRemoved: (cb) => { listeners.removed.add(cb); return () => listeners.removed.delete(cb); },
+          onClear:   (cb) => { listeners.clear.add(cb);   return () => listeners.clear.delete(cb); },
+        };
+      })();
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

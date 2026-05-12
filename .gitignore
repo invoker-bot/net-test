@@ -7,3 +7,7 @@ dist/
 .env.local
 .vite/
 .cache/
+
+# Runtime artefacts from scripts/test-*.mjs (puppeteer screenshots etc.)
+scripts/.shot-*
+scripts/.debug-*
