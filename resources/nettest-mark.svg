@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">NetTest Logo Mark</title>
+  <desc id="desc">A compact network packet logo with connected nodes, byte cells, and a live signal line.</desc>
+  <rect width="512" height="512" rx="112" fill="#0F172A"/>
+  <rect x="86" y="102" width="340" height="308" rx="48" fill="#F8FAFC"/>
+  <path d="M136 170H376" stroke="#CBD5E1" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="150" cy="170" r="8" fill="#EF4444"/>
+  <circle cx="184" cy="170" r="8" fill="#F59E0B"/>
+  <circle cx="218" cy="170" r="8" fill="#10B981"/>
+
+  <path d="M154 284H202L230 236L284 342L318 284H358"
+        fill="none" stroke="#14B8A6" stroke-width="26"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <path d="M152 250H208" stroke="#0F172A" stroke-width="18" stroke-linecap="round"/>
+  <path d="M304 250H360" stroke="#0F172A" stroke-width="18" stroke-linecap="round"/>
+  <path d="M152 318H208" stroke="#0F172A" stroke-width="18" stroke-linecap="round"/>
+  <path d="M304 318H360" stroke="#0F172A" stroke-width="18" stroke-linecap="round"/>
+
+  <path d="M136 284H226M286 284H376" stroke="#94A3B8" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="136" cy="284" r="24" fill="#2563EB"/>
+  <circle cx="256" cy="284" r="30" fill="#0F172A"/>
+  <circle cx="376" cy="284" r="24" fill="#F59E0B"/>
+  <circle cx="256" cy="284" r="11" fill="#F8FAFC"/>
+</svg>

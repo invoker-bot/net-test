@@ -2,19 +2,65 @@
   "name": "net-test",
   "version": "0.1.0",
   "description": "NetTest — TCP/UDP/WebSocket/Serial packet inspector with live hex viewer and configurable parser.",
+  "license": "MIT",
+  "author": "NetTest contributors",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build:vite": "electron-vite build",
+    "build": "npm run build:vite && electron-builder",
+    "pack": "npm run build:vite && electron-builder --dir",
     "preview": "electron-vite preview",
     "start": "electron-vite preview"
+  },
+  "build": {
+    "appId": "com.nettest.app",
+    "productName": "NetTest",
+    "asar": true,
+    "directories": {
+      "buildResources": "resources",
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/nettest-mark.png",
+        "to": "nettest-mark.png"
+      }
+    ],
+    "mac": {
+      "icon": "resources/nettest-mark.icns",
+      "category": "public.app-category.developer-tools",
+      "identity": "-",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "resources/nettest-mark.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "icon": "resources/nettest-mark.png",
+      "category": "Development",
+      "target": [
+        "AppImage"
+      ]
+    }
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.10",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.21",
     "electron": "^33.4.11",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^3.1.0",
     "postcss": "^8.5.6",
     "react": "^18.3.1",

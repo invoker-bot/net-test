@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 220" role="img" aria-labelledby="title desc">
+  <title id="title">NetTest Logo</title>
+  <desc id="desc">NetTest wordmark with a network packet mark showing connected nodes, byte cells, and a live signal line.</desc>
+  <g transform="translate(24 24)">
+    <rect width="172" height="172" rx="38" fill="#0F172A"/>
+    <rect x="28" y="36" width="116" height="104" rx="18" fill="#F8FAFC"/>
+    <path d="M44 59H128" stroke="#CBD5E1" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="49" cy="59" r="3.6" fill="#EF4444"/>
+    <circle cx="63" cy="59" r="3.6" fill="#F59E0B"/>
+    <circle cx="77" cy="59" r="3.6" fill="#10B981"/>
+
+    <path d="M50 98H70L81 80L100 124L113 98H124"
+          fill="none" stroke="#14B8A6" stroke-width="10"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M51 87H69" stroke="#0F172A" stroke-width="7" stroke-linecap="round"/>
+    <path d="M103 87H122" stroke="#0F172A" stroke-width="7" stroke-linecap="round"/>
+    <path d="M51 111H69" stroke="#0F172A" stroke-width="7" stroke-linecap="round"/>
+    <path d="M103 111H122" stroke="#0F172A" stroke-width="7" stroke-linecap="round"/>
+
+    <path d="M44 98H76M96 98H128" stroke="#94A3B8" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="44" cy="98" r="10" fill="#2563EB"/>
+    <circle cx="86" cy="98" r="12" fill="#0F172A"/>
+    <circle cx="128" cy="98" r="10" fill="#F59E0B"/>
+    <circle cx="86" cy="98" r="4" fill="#F8FAFC"/>
+  </g>
+
+  <g fill="#0F172A">
+    <text x="228" y="104"
+          font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+          font-size="62" font-weight="760" letter-spacing="0">NetTest</text>
+    <text x="232" y="145"
+          font-family="'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace"
+          font-size="20" font-weight="650" letter-spacing="0" fill="#475569">packet inspector</text>
+  </g>
+
+  <g transform="translate(568 64)">
+    <rect x="0" y="0" width="62" height="30" rx="8" fill="#E0F2FE"/>
+    <text x="31" y="21" text-anchor="middle"
+          font-family="'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace"
+          font-size="15" font-weight="700" fill="#0369A1">TCP</text>
+    <rect x="74" y="0" width="62" height="30" rx="8" fill="#DCFCE7"/>
+    <text x="105" y="21" text-anchor="middle"
+          font-family="'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace"
+          font-size="15" font-weight="700" fill="#166534">UDP</text>
+    <rect x="0" y="42" width="62" height="30" rx="8" fill="#FEF3C7"/>
+    <text x="31" y="63" text-anchor="middle"
+          font-family="'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace"
+          font-size="15" font-weight="700" fill="#92400E">WS</text>
+    <rect x="74" y="42" width="62" height="30" rx="8" fill="#F1F5F9"/>
+    <text x="105" y="63" text-anchor="middle"
+          font-family="'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace"
+          font-size="15" font-weight="700" fill="#334155">SER</text>
+  </g>
+</svg>

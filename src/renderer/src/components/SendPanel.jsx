@@ -11,7 +11,7 @@ const TEMPLATES = [
   { id: 'ack',       label: 'Ack',       hex: 'FE CA 01 21 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00' },
 ];
 
-export function SendPanel({ open, onClose, struct, onSend, conn, lastInbound, conns, structsByConn, getLatestValue }) {
+export function SendPanel({ open, onClose, onOpen, struct, onSend, conn, lastInbound, conns, structsByConn, getLatestValue }) {
   const isListener = conn?.role === 'server';
   const [mode, setMode] = useState('raw');
   const [hexText, setHexText] = useState('48 65 6C 6C 6F 2C 20 77 6F 72 6C 64 21 0A');
@@ -137,7 +137,25 @@ export function SendPanel({ open, onClose, struct, onSend, conn, lastInbound, co
     }
   };
 
-  if (!open) return null;
+  if (!open) {
+    // Collapsed: thin strip that lives where the panel used to be, so the
+    // muscle-memory click-to-reopen lands in the same place the user closed it.
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        title="Open send panel"
+        className="absolute left-0 right-0 bottom-0 h-8 border-t border-zinc-200 bg-zinc-50/80 hover:bg-zinc-100 flex items-center gap-2 px-3 text-[11.5px] text-zinc-600 transition-colors"
+      >
+        <Icon name="send" size={11} className="text-zinc-500" />
+        <span className="font-medium text-zinc-700">Send</span>
+        <span className="text-zinc-300">·</span>
+        <span className="mono text-zinc-500 truncate">{conn?.endpoint || '—'}</span>
+        <div className="flex-1" />
+        <Icon name="chevron" size={11} className="-rotate-90 text-zinc-500" />
+      </button>
+    );
+  }
   const allModes = ['raw', 'json', 'generated', 'template'];
   const preview = (() => { try { return currentBytes(); } catch { return new Uint8Array(); } })();
 

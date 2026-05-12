@@ -275,7 +275,7 @@ export default function App() {
             </div>
           </div>
           <div className="ml-auto flex items-center gap-1 pr-2">
-            <Button size="xs" variant={sendOpen ? 'primary' : 'ghost'} onClick={() => setSendOpen(!sendOpen)} title="Toggle send panel">
+            <Button size="xs" variant={sendOpen ? 'primary' : 'default'} onClick={() => setSendOpen(!sendOpen)} title="Toggle send panel">
               <Icon name="send" size={11} /> Send
             </Button>
             <Button size="xs" variant="ghost" title="Settings" onClick={() => setTweaksOpen((v) => !v)}>
@@ -325,6 +325,7 @@ export default function App() {
               <SendPanel
                 open={sendOpen}
                 onClose={() => setSendOpen(false)}
+                onOpen={() => setSendOpen(true)}
                 struct={struct}
                 conn={selectedConn}
                 lastInbound={lastInbound}

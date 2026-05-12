@@ -5,16 +5,26 @@ import { dirname, join } from 'node:path';
 import { ConnectionManager } from './connection-mgr.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const APP_NAME = 'NetTest';
+
+function getAppIconPath() {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'nettest-mark.png')
+    : join(__dirname, '../../resources/nettest-mark.png');
+}
 
 let mainWindow = null;
 let cm = null;
 
 function createWindow() {
+  const appIcon = getAppIconPath();
   mainWindow = new BrowserWindow({
     width: 1480,
     height: 900,
     minWidth: 1100,
     minHeight: 700,
+    title: APP_NAME,
+    icon: appIcon,
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#ffffff',
     show: false,
@@ -86,6 +96,11 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
+  app.setName(APP_NAME);
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(getAppIconPath());
+  }
+
   registerIpc();
   createWindow();
 

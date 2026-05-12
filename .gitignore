@@ -11,3 +11,7 @@ dist/
 # Runtime artefacts from scripts/test-*.mjs (puppeteer screenshots etc.)
 scripts/.shot-*
 scripts/.debug-*
+
+# Local deployment Taskfile (per-developer, holds SSH alias and host paths).
+Taskfile.yml
+Taskfile.local.yml
