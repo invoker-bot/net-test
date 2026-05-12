@@ -11,7 +11,7 @@ const TEMPLATES = [
   { id: 'ack',       label: 'Ack',       hex: 'FE CA 01 21 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00' },
 ];
 
-export function SendPanel({ open, onClose, struct, onSend, conn, lastInbound }) {
+export function SendPanel({ open, onClose, struct, onSend, conn, lastInbound, conns, structsByConn, getLatestValue }) {
   const isListener = conn?.role === 'server';
   const [mode, setMode] = useState('raw');
   const [hexText, setHexText] = useState('48 65 6C 6C 6F 2C 20 77 6F 72 6C 64 21 0A');
@@ -45,7 +45,10 @@ export function SendPanel({ open, onClose, struct, onSend, conn, lastInbound }) 
   }, [open, encoding]);
 
   const bytesFromHex = useCallback(() => hexToBytes(hexText), [hexText]);
-  const bytesFromGen = useCallback(() => generateBytes(struct, gen), [struct, gen]);
+  const bytesFromGen = useCallback(
+    () => generateBytes(struct, gen, { getLatestValue }),
+    [struct, gen, getLatestValue],
+  );
 
   const bytesFromJson = useCallback(() => {
     let obj;
@@ -260,6 +263,9 @@ export function SendPanel({ open, onClose, struct, onSend, conn, lastInbound }) 
                     field={f}
                     cfg={fieldGen(f)}
                     onChange={(patch) => setGen((g) => ({ ...g, [f.id]: { ...fieldGen(f), ...patch } }))}
+                    conns={conns}
+                    structsByConn={structsByConn}
+                    getLatestValue={getLatestValue}
                   />
                 ))}
               </div>
@@ -347,10 +353,10 @@ function StrIn({ value, onChange, w = 120 }) {
   );
 }
 
-function GenRow({ field, cfg, onChange }) {
+function GenRow({ field, cfg, onChange, conns, structsByConn, getLatestValue }) {
   const num = !['string', 'padding', 'bitfield', 'enum:u8'].includes(field.type);
   const kinds = num
-    ? [['const', 'fixed'], ['uniform', 'uniform'], ['gauss', 'gaussian'], ['walk', 'walk'], ['sine', 'sine'], ['counter', 'counter'], ['ramp', 'ramp']]
+    ? [['const', 'fixed'], ['uniform', 'uniform'], ['gauss', 'gaussian'], ['walk', 'walk'], ['sine', 'sine'], ['counter', 'counter'], ['ramp', 'ramp'], ['bound', 'bound (live)']]
     : field.type === 'string' ? [['const', 'fixed']]
     : [['const', 'fixed']];
 
@@ -368,12 +374,19 @@ function GenRow({ field, cfg, onChange }) {
       >
         {kinds.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
-      <GenParams field={field} cfg={cfg} onChange={onChange} />
+      <GenParams
+        field={field}
+        cfg={cfg}
+        onChange={onChange}
+        conns={conns}
+        structsByConn={structsByConn}
+        getLatestValue={getLatestValue}
+      />
     </div>
   );
 }
 
-function GenParams({ field, cfg, onChange }) {
+function GenParams({ field, cfg, onChange, conns, structsByConn, getLatestValue }) {
   if (field.type === 'string') {
     return <div className="flex items-center gap-1.5"><Lab>str</Lab><StrIn value={cfg.str} onChange={(v) => onChange({ str: v })} w={140} /></div>;
   }
@@ -424,6 +437,64 @@ function GenParams({ field, cfg, onChange }) {
           <Lab>step</Lab><NumIn value={cfg.step} onChange={(v) => onChange({ step: v })} />
         </div>
       );
+    case 'bound':
+      return (
+        <BoundParams
+          cfg={cfg} onChange={onChange}
+          conns={conns} structsByConn={structsByConn} getLatestValue={getLatestValue}
+        />
+      );
     default: return null;
   }
+}
+
+function BoundParams({ cfg, onChange, conns, structsByConn, getLatestValue }) {
+  // Source-field options come from whichever connection the user picked.
+  // Restrict to fields whose decoded value `getLatestValue` can return as a
+  // number — numeric primitives + bitfield/enum (those decode to objects but
+  // surface a `.raw` integer).
+  const srcStruct = structsByConn?.[cfg.sourceConnId];
+  const fieldOpts = (srcStruct?.fields || []).filter(
+    (f) => /^(uint|int|float)/.test(f.type) || f.type === 'bitfield' || f.type === 'enum:u8',
+  );
+  // Re-render at ~10Hz so the live preview reflects incoming traffic. Cheap:
+  // a single getLatestValue call per row per tick.
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (cfg.kind !== 'bound' || !cfg.sourceConnId || !cfg.sourceField) return;
+    const id = setInterval(() => force((n) => n + 1), 100);
+    return () => clearInterval(id);
+  }, [cfg.kind, cfg.sourceConnId, cfg.sourceField]);
+  const live = getLatestValue?.(cfg.sourceConnId, cfg.sourceField);
+  const resolved = (typeof live === 'number' && Number.isFinite(live))
+    ? live * (cfg.scale ?? 1) + (cfg.offset ?? 0)
+    : null;
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <select
+        value={cfg.sourceConnId || ''}
+        onChange={(e) => onChange({ sourceConnId: e.target.value, sourceField: '' })}
+        className="text-[11px] h-6 px-1 border border-zinc-200 rounded bg-white ring-accent max-w-[120px]"
+        title="Source connection"
+      >
+        <option value="">(connection)</option>
+        {(conns || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <select
+        value={cfg.sourceField || ''}
+        onChange={(e) => onChange({ sourceField: e.target.value })}
+        disabled={!cfg.sourceConnId}
+        className="text-[11px] h-6 px-1 border border-zinc-200 rounded bg-white ring-accent max-w-[130px] disabled:opacity-50"
+        title="Source field"
+      >
+        <option value="">(field)</option>
+        {fieldOpts.map((f) => <option key={f.id} value={f.name}>{f.name}</option>)}
+      </select>
+      <Lab>×</Lab><NumIn value={cfg.scale ?? 1} onChange={(v) => onChange({ scale: v })} w={48} />
+      <Lab>+</Lab><NumIn value={cfg.offset ?? 0} onChange={(v) => onChange({ offset: v })} w={48} />
+      <span className="mono text-[10px] text-zinc-400 tabular min-w-[40px]" title="Current resolved value">
+        = {resolved == null ? '—' : (Number.isInteger(resolved) ? resolved : resolved.toFixed(2))}
+      </span>
+    </div>
+  );
 }

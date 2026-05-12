@@ -207,6 +207,33 @@ export default function App() {
     return null;
   }, [selectedBuffer]);
 
+  // Resolve "live" values from any other connection's most recent RX packet,
+  // decoded against THAT connection's own struct. Used by the SendPanel's
+  // `bound` generator kind to bridge data between connections (e.g., ACC
+  // Physics MMAP → motion-platform UDP). Numbers come out as numbers;
+  // bitfield/enum yield their `.raw` integer so they still compose with
+  // scale + offset.
+  const getLatestValue = useCallback((connId, fieldName) => {
+    if (!connId || !fieldName) return null;
+    const buf = buffers[connId];
+    if (!buf || !buf.length) return null;
+    const s = structsByConn[connId];
+    if (!s || !s.fields) return null;
+    let pkt = null;
+    for (let i = buf.length - 1; i >= 0; i--) {
+      if (buf[i].dir !== 'tx') { pkt = buf[i]; break; }
+    }
+    if (!pkt) pkt = buf[buf.length - 1];
+    const f = s.fields.find((x) => x.name === fieldName);
+    if (!f) return null;
+    const decoded = decodeField(pkt.bytes, f, s.endian);
+    const v = decoded.value;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'bigint') return Number(v);
+    if (v && typeof v === 'object' && typeof v.raw === 'number') return v.raw;
+    return null;
+  }, [buffers, structsByConn]);
+
   const handleAddConn = async () => {
     const created = await addConn();
     setSelectedId(created.id);
@@ -302,6 +329,9 @@ export default function App() {
                 conn={selectedConn}
                 lastInbound={lastInbound}
                 onSend={handleSend}
+                conns={conns}
+                structsByConn={structsByConn}
+                getLatestValue={getLatestValue}
               />
             )}
           </div>

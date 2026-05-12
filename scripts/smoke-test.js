@@ -14,6 +14,7 @@ import { MockTransport } from '../src/main/transports/mock.js';
 import { Recorder } from '../src/main/recorder.js';
 import { serializeSchema, deserializeSchema, SCHEMA_FORMAT } from '../src/renderer/src/lib/schema-io.js';
 import { ACC_PHYSICS_PRESET } from '../src/renderer/src/lib/presets-acc.js';
+import { generateBytes, nextValue } from '../src/renderer/src/lib/parser.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
@@ -187,6 +188,64 @@ async function testRecorder() {
   await fs.rm(tmpDir, { recursive: true, force: true });
 }
 
+function testBoundGenerator() {
+  console.log('\nGenerator kind `bound` reads cross-connection live values');
+
+  // Stub the value source as a closure over a tiny mock dictionary so we can
+  // mutate it between calls and verify the generator re-reads.
+  const live = { gas: 0.5, rpms: 7500, brake: 0.25 };
+  const ctx = {
+    getLatestValue: (connId, fieldName) => connId === 'src' ? live[fieldName] : null,
+  };
+
+  // Direct nextValue calls — exercise the simple cases first.
+  const fieldF32 = { id: 'a', type: 'float32', name: 'a' };
+  let v = nextValue(fieldF32, { kind: 'bound', sourceConnId: 'src', sourceField: 'gas', scale: 1, offset: 0 }, ctx);
+  check('bound: scale=1 offset=0 passes value through', Math.abs(v - 0.5) < 1e-9, String(v));
+
+  v = nextValue(fieldF32, { kind: 'bound', sourceConnId: 'src', sourceField: 'gas', scale: 100, offset: 0 }, ctx);
+  check('bound: scale=100 multiplies', Math.abs(v - 50) < 1e-9, String(v));
+
+  v = nextValue(fieldF32, { kind: 'bound', sourceConnId: 'src', sourceField: 'gas', scale: 1, offset: 10 }, ctx);
+  check('bound: offset=10 adds', Math.abs(v - 10.5) < 1e-9, String(v));
+
+  v = nextValue(fieldF32, { kind: 'bound', sourceConnId: 'src', sourceField: 'missing', scale: 5, offset: 0 }, ctx);
+  check('bound: unknown field → 0 (then scaled/offset)', v === 0, String(v));
+
+  v = nextValue(fieldF32, { kind: 'bound', sourceConnId: 'src', sourceField: 'gas' }, /* no ctx */ undefined);
+  check('bound: missing ctx safe (no crash, returns 0)', v === 0, String(v));
+
+  // End-to-end: a 2-field outgoing packet, both bound.
+  const outStruct = {
+    name: 'Motion Out', endian: 'LE', size: 8,
+    fields: [
+      { id: 'p_gas',  name: 'pedalGas',  type: 'float32', offset: 0, size: 4 },
+      { id: 'p_rpm',  name: 'rpmScaled', type: 'uint16',  offset: 4, size: 2 },
+    ],
+  };
+  const gen = {
+    p_gas: { kind: 'bound', sourceConnId: 'src', sourceField: 'gas',  scale: 1,    offset: 0 },
+    p_rpm: { kind: 'bound', sourceConnId: 'src', sourceField: 'rpms', scale: 0.01, offset: 0 },
+  };
+  const bytes = generateBytes(outStruct, gen, ctx);
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const gasOut = dv.getFloat32(0, true);
+  const rpmOut = dv.getUint16(4, true);
+  check('bound through generateBytes: float32 gas = 0.5', Math.abs(gasOut - 0.5) < 1e-6, String(gasOut));
+  check('bound through generateBytes: uint16 scaled rpms 7500*0.01 = 75', rpmOut === 75, String(rpmOut));
+
+  // Mutate the source — next generateBytes should reflect the new value
+  // (proves nothing is being cached in generator state).
+  live.gas = 0.9;
+  live.rpms = 12000;
+  const bytes2 = generateBytes(outStruct, gen, ctx);
+  const dv2 = new DataView(bytes2.buffer, bytes2.byteOffset, bytes2.byteLength);
+  check('bound: re-reads source on each generate (gas 0.5 → 0.9)',
+    Math.abs(dv2.getFloat32(0, true) - 0.9) < 1e-6);
+  check('bound: re-reads source on each generate (rpms 7500 → 12000)',
+    dv2.getUint16(4, true) === 120);
+}
+
 function testAccPreset() {
   console.log('\nACC Physics preset is internally consistent');
   const p = ACC_PHYSICS_PRESET;
@@ -268,6 +327,7 @@ async function main() {
     await testRecorder();
     testSchemaIO();
     testAccPreset();
+    testBoundGenerator();
   } catch (e) {
     console.error('UNHANDLED', e);
     results.push({ name: 'unhandled', ok: false, detail: e.message });

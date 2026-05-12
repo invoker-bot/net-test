@@ -137,11 +137,19 @@ export function typeMin(f) {
 // Stateful generator state, keyed by field id (module-level so it persists across renders).
 const _genState = {};
 
-export function nextValue(field, cfg) {
+// `ctx` lets generators read live state outside their own closure — currently
+// only used by `bound`, which pulls its value from another connection's most
+// recent decoded packet via ctx.getLatestValue(connId, fieldName).
+export function nextValue(field, cfg, ctx) {
   const k = field.id;
   const st = (_genState[k] = _genState[k] || {});
   switch (cfg.kind) {
     case 'const': return cfg.num ?? 0;
+    case 'bound': {
+      const src = ctx?.getLatestValue?.(cfg.sourceConnId, cfg.sourceField);
+      const x = typeof src === 'number' && Number.isFinite(src) ? src : 0;
+      return x * (cfg.scale ?? 1) + (cfg.offset ?? 0);
+    }
     case 'uniform': {
       const v = cfg.min + Math.random() * (cfg.max - cfg.min);
       return isInt(field) ? Math.round(v) : v;
@@ -202,11 +210,12 @@ export function resetCfg(field, kind) {
     case 'sine':    return { kind, center: 0, amp: Math.max(1, typeMax(field) * 0.5), period: 60 };
     case 'counter': return { kind, start: 0, step: 1 };
     case 'ramp':    return { kind, min: 0, max: typeMax(field), step: 1 };
+    case 'bound':   return { kind, sourceConnId: '', sourceField: '', scale: 1, offset: 0 };
   }
   return { kind: 'const', num: 0 };
 }
 
-export function generateBytes(struct, gen) {
+export function generateBytes(struct, gen, ctx) {
   const total = struct.size || (struct.fields.length ? Math.max(...struct.fields.map((f) => f.offset + f.size)) : 0);
   const buf = new ArrayBuffer(total);
   const view = new DataView(buf);
@@ -225,7 +234,7 @@ export function generateBytes(struct, gen) {
       view.setUint8(f.offset, (cfg.num | 0) & 0xFF);
       continue;
     }
-    const v = nextValue(f, cfg);
+    const v = nextValue(f, cfg, ctx);
     try {
       switch (f.type) {
         case 'uint8':   view.setUint8(f.offset, v & 0xFF); break;
