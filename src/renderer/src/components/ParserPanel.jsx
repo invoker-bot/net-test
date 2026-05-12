@@ -200,6 +200,7 @@ function FieldTable({ struct, decoded, hoveredFieldId, onHoverField, selectedId,
               onMouseEnter={() => onHoverField(f.id)}
               onMouseLeave={() => onHoverField(null)}
               onClick={() => onSelect(f.id)}
+              title={f.note || undefined}
               className={cx('border-t border-zinc-100', hov && 'bg-zinc-50', selectedId === f.id && 'bg-zinc-100')}
             >
               <td className="px-3 py-1.5">
@@ -232,6 +233,7 @@ function FieldCards({ struct, decoded, hoveredFieldId, onHoverField, selectedId,
             onMouseEnter={() => onHoverField(f.id)}
             onMouseLeave={() => onHoverField(null)}
             onClick={() => onSelect(f.id)}
+            title={f.note || undefined}
             className={cx(
               'rounded-lg border bg-white p-2.5 cursor-default',
               hov ? 'border-zinc-300' : 'border-zinc-200',
@@ -355,6 +357,17 @@ function PropertyPanel({ field, decoded, history, onChange, onRemove, onMoveUp, 
             className="text-[11.5px] w-full bg-white border border-zinc-200 rounded px-1.5 h-6 ring-accent"
           />
         } />
+        <div className="col-span-2">
+          <PropRow label="Comment" value={
+            <textarea
+              value={field.note || ''}
+              placeholder="What this field means, its expected range, source / spec reference…"
+              onChange={(e) => onChange({ note: e.target.value })}
+              rows={2}
+              className="text-[11.5px] w-full bg-white border border-zinc-200 rounded px-1.5 py-1 ring-accent resize-y leading-snug"
+            />
+          } />
+        </div>
       </div>
       <div className="px-3 pb-3">
         <div className="rounded-md border border-zinc-200 bg-white p-2.5">

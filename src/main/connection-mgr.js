@@ -6,6 +6,7 @@ import { UdpTransport } from './transports/udp.js';
 import { WsClientTransport, WsServerTransport } from './transports/ws.js';
 import { MockTransport } from './transports/mock.js';
 import { SerialTransport, listSerialPorts } from './transports/serial.js';
+import { MmapTransport } from './transports/mmap.js';
 import { Recorder } from './recorder.js';
 
 export const IS_DEV = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
@@ -21,6 +22,9 @@ const REAL_DEFAULT_CONNECTIONS = [
   { id: 'c3', name: 'TCP Server :7100', proto: 'TCP', role: 'server', bind: '0.0.0.0:7100', endpoint: 'tcp://0.0.0.0:7100', color: '#f59e0b' },
   { id: 'c4', name: 'Telemetry Client', proto: 'TCP', role: 'client', remote: '127.0.0.1:7100', endpoint: 'tcp://127.0.0.1:7100', color: '#8b5cf6' },
   { id: 'c5', name: 'WS Echo Client', proto: 'WS', role: 'client', remote: 'ws://echo.websocket.events', endpoint: 'ws://echo.websocket.events', color: '#ef4444' },
+  { id: 'c6', name: 'ACC Physics', proto: 'MMAP', role: 'client',
+    remote: 'Local\\acpmf_physics', endpoint: 'mmap://Local\\acpmf_physics',
+    color: '#dc2626', mmapSize: 800, mmapPollHz: 50 },
 ];
 
 const DEFAULT_CONNECTIONS = IS_DEV ? [MOCK_CONNECTION, ...REAL_DEFAULT_CONNECTIONS] : REAL_DEFAULT_CONNECTIONS;
@@ -84,6 +88,7 @@ export class ConnectionManager {
       connections: Array.from(this.conns.values()).map((c) => ({
         id: c.id, name: c.name, proto: c.proto, role: c.role,
         bind: c.bind, remote: c.remote, endpoint: c.endpoint, color: c.color,
+        mmapSize: c.mmapSize, mmapPollHz: c.mmapPollHz,
       })),
       recordingsDir: this._recordingsDir,
     };
@@ -123,6 +128,8 @@ export class ConnectionManager {
       lastError: c.lastError,
       recording: !!c.recording,
       recordingPath: c.recordingPath || null,
+      mmapSize: c.mmapSize,
+      mmapPollHz: c.mmapPollHz,
     };
   }
 
@@ -159,6 +166,8 @@ export class ConnectionManager {
       color: spec.color || '#71717a',
       status: 'idle',
       streaming: false,
+      mmapSize: spec.mmapSize,
+      mmapPollHz: spec.mmapPollHz,
     };
     this.conns.set(id, conn);
     this._emitState(id);
@@ -168,6 +177,7 @@ export class ConnectionManager {
 
   _buildEndpoint(c) {
     const proto = (c.proto || 'udp').toLowerCase();
+    if (proto === 'mmap') return 'mmap://' + (c.remote || c.bind || '');
     const addr = c.role === 'server' ? (c.bind || '0.0.0.0:0') : (c.remote || '127.0.0.1:0');
     if (proto === 'ser') return 'serial://' + addr;
     if (proto === 'ws') return (c.remote && c.remote.startsWith('ws')) ? c.remote : 'ws://' + addr;
@@ -268,6 +278,9 @@ export class ConnectionManager {
         break;
       case 'SER':
         t = new SerialTransport(c.remote || c.bind);
+        break;
+      case 'MMAP':
+        t = new MmapTransport(c);
         break;
       case 'MOCK':
         t = new MockTransport();

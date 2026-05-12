@@ -1,18 +1,27 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_STRUCT } from './parser.js';
+import { ACC_PHYSICS_PRESET } from './presets-acc.js';
 
 const LS_KEY = 'nettest.structs.v1';
 
 function loadLibrary() {
+  let userArr = null;
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return defaultLibrary();
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr) || !arr.length) return defaultLibrary();
-    return arr;
-  } catch {
-    return defaultLibrary();
-  }
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) userArr = arr;
+    }
+  } catch {}
+  if (!userArr) return defaultLibrary();
+  // Always overlay current shipped builtins on top of the saved library so a
+  // bug-fixed builtin reaches existing users without resetting their custom
+  // presets. Loading a builtin into the editor never writes back to the
+  // builtin slot (the menu only saves under a chosen name), so this is safe.
+  const defaults = defaultLibrary();
+  const userOnly = userArr.filter((p) => !p.builtin);
+  const currentBuiltins = defaults.filter((p) => p.builtin);
+  return [...currentBuiltins, ...userOnly];
 }
 
 function saveLibrary(arr) {
@@ -51,6 +60,7 @@ function defaultLibrary() {
         { id: 'm_crc',  name: 'crc16',     type: 'uint16', offset: 6, size: 2, colorIdx: 0, fmt: 'hex' },
       ],
     },
+    ACC_PHYSICS_PRESET,
   ];
 }
 

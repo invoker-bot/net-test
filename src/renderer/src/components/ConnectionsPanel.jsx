@@ -140,8 +140,12 @@ export function ConnectionsPanel({
 }
 
 function ConnEditor({ c, onChange, onRemove, onClose }) {
-  const isServer = c.role === 'server';
-  const addrField = isServer ? 'bind' : 'remote';
+  const isMmap = c.proto === 'MMAP';
+  // MMAP and Serial have no server/client distinction — the address is always
+  // a resource name ("Local\acpmf_physics" or "COM3"). We pin role to 'client'
+  // for those protos and route the address through `remote`.
+  const isServer = c.role === 'server' && !isMmap;
+  const addrField = (isMmap || c.role !== 'server') ? 'remote' : 'bind';
   const addrVal = c[addrField] || '';
   const updateAddr = (val) => {
     const proto = c.proto.toLowerCase();
@@ -149,9 +153,22 @@ function ConnEditor({ c, onChange, onRemove, onClose }) {
     if (c.proto === 'SER') url = 'serial://' + val;
     else if (c.proto === 'WS') url = val.startsWith('ws') ? val : 'ws://' + val;
     else if (c.proto === 'MOCK') url = 'mock://' + val;
+    else if (c.proto === 'MMAP') url = 'mmap://' + val;
     else url = `${proto}://${val}`;
     onChange({ [addrField]: val, endpoint: url });
   };
+  const onProtoChange = (e) => {
+    const proto = e.target.value;
+    const patch = { proto };
+    // MMAP / SER are read-only single-endpoint protos; force role=client so the
+    // address routes through `remote` and the LISTEN/DIAL badge isn't misleading.
+    if (proto === 'MMAP' || proto === 'SER') patch.role = 'client';
+    onChange(patch);
+  };
+  const addrPlaceholder = isMmap
+    ? 'Local\\acpmf_physics'
+    : c.proto === 'SER' ? '/dev/cu.usbmodem or COM3:115200'
+    : isServer ? '0.0.0.0:5005' : 'host:port';
   return (
     <div onClick={(e) => e.stopPropagation()} className="mt-2 ml-8 rounded-md border border-zinc-200 bg-white p-2 space-y-2">
       <div className="flex items-center gap-1.5">
@@ -165,18 +182,19 @@ function ConnEditor({ c, onChange, onRemove, onClose }) {
       <div className="grid grid-cols-2 gap-1.5">
         <select
           value={c.proto}
-          onChange={(e) => onChange({ proto: e.target.value })}
+          onChange={onProtoChange}
           className="text-[11px] h-6 px-1 border border-zinc-200 rounded bg-white ring-accent"
         >
           {(window.nettest?.isDev
-            ? ['TCP', 'UDP', 'WS', 'SER', 'MOCK']
-            : ['TCP', 'UDP', 'WS', 'SER']
+            ? ['TCP', 'UDP', 'WS', 'SER', 'MMAP', 'MOCK']
+            : ['TCP', 'UDP', 'WS', 'SER', 'MMAP']
           ).map((p) => <option key={p}>{p}</option>)}
         </select>
         <select
           value={c.role}
           onChange={(e) => onChange({ role: e.target.value })}
-          className="text-[11px] h-6 px-1 border border-zinc-200 rounded bg-white ring-accent"
+          disabled={isMmap || c.proto === 'SER'}
+          className="text-[11px] h-6 px-1 border border-zinc-200 rounded bg-white ring-accent disabled:opacity-50"
         >
           <option value="server">LISTEN (0.0.0.0:port)</option>
           <option value="client">DIAL (remote)</option>
@@ -185,9 +203,34 @@ function ConnEditor({ c, onChange, onRemove, onClose }) {
       <input
         value={addrVal}
         onChange={(e) => updateAddr(e.target.value)}
-        placeholder={isServer ? '0.0.0.0:5005' : 'host:port'}
+        placeholder={addrPlaceholder}
         className="mono w-full text-[11.5px] h-6 px-1.5 border border-zinc-200 rounded ring-accent"
       />
+      {isMmap && (
+        <div className="grid grid-cols-2 gap-1.5">
+          <label className="text-[10px] text-zinc-500 flex flex-col gap-0.5">
+            <span className="uppercase tracking-wider">Size (bytes)</span>
+            <input
+              type="number"
+              min={1}
+              value={c.mmapSize ?? 800}
+              onChange={(e) => onChange({ mmapSize: Math.max(1, parseInt(e.target.value, 10) || 0) })}
+              className="mono text-[11.5px] h-6 px-1.5 border border-zinc-200 rounded ring-accent text-zinc-900"
+            />
+          </label>
+          <label className="text-[10px] text-zinc-500 flex flex-col gap-0.5">
+            <span className="uppercase tracking-wider">Poll (Hz)</span>
+            <input
+              type="number"
+              min={1}
+              max={1000}
+              value={c.mmapPollHz ?? 50}
+              onChange={(e) => onChange({ mmapPollHz: Math.max(1, Math.min(1000, parseInt(e.target.value, 10) || 0)) })}
+              className="mono text-[11.5px] h-6 px-1.5 border border-zinc-200 rounded ring-accent text-zinc-900"
+            />
+          </label>
+        </div>
+      )}
       <div className="flex items-center gap-1.5">
         <button
           onClick={onRemove}

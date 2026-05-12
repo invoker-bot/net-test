@@ -37,6 +37,6 @@ export function Icon({ name, size = 14, className = '' }) {
 }
 
 export function ProtoIcon({ proto, className = '' }) {
-  const map = { TCP: 'plug', UDP: 'globe', WS: 'bolt', SER: 'code', MOCK: 'sparkle' };
+  const map = { TCP: 'plug', UDP: 'globe', WS: 'bolt', SER: 'code', MMAP: 'doc', MOCK: 'sparkle' };
   return <Icon name={map[proto] || 'globe'} className={className} />;
 }

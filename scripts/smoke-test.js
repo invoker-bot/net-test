@@ -12,6 +12,8 @@ import { UdpTransport } from '../src/main/transports/udp.js';
 import { WsClientTransport, WsServerTransport } from '../src/main/transports/ws.js';
 import { MockTransport } from '../src/main/transports/mock.js';
 import { Recorder } from '../src/main/recorder.js';
+import { serializeSchema, deserializeSchema, SCHEMA_FORMAT } from '../src/renderer/src/lib/schema-io.js';
+import { ACC_PHYSICS_PRESET } from '../src/renderer/src/lib/presets-acc.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
@@ -185,6 +187,78 @@ async function testRecorder() {
   await fs.rm(tmpDir, { recursive: true, force: true });
 }
 
+function testAccPreset() {
+  console.log('\nACC Physics preset is internally consistent');
+  const p = ACC_PHYSICS_PRESET;
+  check('preset is marked builtin', p.builtin === true);
+  check('declared size is 800 bytes (full SPageFilePhysics region)', p.size === 800);
+  check('endian is LE (Windows native)', p.endian === 'LE');
+
+  // Every field stays within the declared region.
+  let allInBounds = true;
+  let maxEnd = 0;
+  for (const f of p.fields) {
+    const end = f.offset + f.size;
+    if (end > p.size) { allInBounds = false; break; }
+    if (end > maxEnd) maxEnd = end;
+  }
+  check('all field offsets+size <= struct size', allInBounds);
+
+  // Known landmarks from PyAccSharedMemory + Rust crate.
+  const get = (name) => p.fields.find((f) => f.name === name);
+  check('packetId @ 0',            get('packetId')?.offset === 0 && get('packetId')?.type === 'int32');
+  check('gas @ 4 float32',         get('gas')?.offset === 4 && get('gas')?.type === 'float32');
+  check('rpms @ 20 int32',         get('rpms')?.offset === 20 && get('rpms')?.type === 'int32');
+  check('drs @ 200 is INT32 (bug fix)', get('drs')?.offset === 200 && get('drs')?.type === 'int32');
+  check('pitLimiter @ 248 int32',  get('pitLimiter')?.offset === 248 && get('pitLimiter')?.type === 'int32');
+  check('clutch @ 364 float32',    get('clutch')?.offset === 364 && get('clutch')?.type === 'float32');
+  check('isAIControlled @ 416',    get('isAIControlled')?.offset === 416);
+  check('brakeBias @ 564',         get('brakeBias')?.offset === 564);
+  check('localVelocity.x @ 568',   get('localVelocity.x')?.offset === 568);
+  check('slipRatio.FL @ 640',      get('slipRatio.FL')?.offset === 640);
+  check('waterTemp @ 712',         get('waterTemp')?.offset === 712);
+  check('absVibration @ 796 (last 4 bytes)', get('absVibration')?.offset === 796);
+
+  // Every numeric field has a note (this preset is supposed to be the
+  // reference for how to use Comment).
+  const noNote = p.fields.filter((f) => !f.note);
+  check('every field has a `note` comment', noNote.length === 0,
+    noNote.map((f) => f.name).join(', '));
+}
+
+function testSchemaIO() {
+  console.log('\nSchema serialize / deserialize round-trips');
+  const struct = {
+    name: 'ACC Physics',
+    endian: 'LE',
+    size: 372,
+    fields: [
+      { id: 'a', name: 'packetId', type: 'int32', offset: 0, size: 4, colorIdx: 0, fmt: 'dec', note: 'tick counter' },
+      { id: 'b', name: 'gas', type: 'float32', offset: 4, size: 4, colorIdx: 1, fmt: 'f2', note: 'throttle 0..1' },
+    ],
+  };
+  const serialized = serializeSchema(struct);
+  check('format tag stamped', serialized.format === SCHEMA_FORMAT, serialized.format);
+  check('fields preserved through serialize', serialized.fields.length === 2);
+  check('note preserved through serialize', serialized.fields[1].note === 'throttle 0..1');
+
+  // Round-trip via JSON to catch any non-serializable junk.
+  const reread = deserializeSchema(JSON.parse(JSON.stringify(serialized)));
+  check('round-tripped name', reread.name === 'ACC Physics');
+  check('round-tripped endian', reread.endian === 'LE');
+  check('round-tripped fields[0].note', reread.fields[0].note === 'tick counter');
+
+  // Reject foreign formats — protects against opening unrelated JSON files.
+  let rejected = false;
+  try { deserializeSchema({ format: 'something-else', fields: [] }); }
+  catch { rejected = true; }
+  check('rejects unknown format tag', rejected);
+
+  // Endian normalization: a stray "le" should fall back to safe default.
+  const normalized = deserializeSchema({ format: SCHEMA_FORMAT, endian: 'le', fields: [] });
+  check('endian normalized to LE on bad input', normalized.endian === 'LE');
+}
+
 async function main() {
   try {
     await testMock();
@@ -192,6 +266,8 @@ async function main() {
     await testUdp();
     await testWebSocket();
     await testRecorder();
+    testSchemaIO();
+    testAccPreset();
   } catch (e) {
     console.error('UNHANDLED', e);
     results.push({ name: 'unhandled', ok: false, detail: e.message });
